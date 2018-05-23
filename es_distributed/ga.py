@@ -22,11 +22,12 @@ def setup(exp, single_threaded):
 
 def rollout_and_update_ob_stat(policy, env, timestep_limit, rs, task_ob_stat, calc_obstat_prob):
     if policy.needs_ob_stat and calc_obstat_prob != 0 and rs.rand() < calc_obstat_prob:
-        rollout_rews, rollout_len, obs = policy.rollout(
+        rollout_rews, rollout_len, obs, _ = policy.rollout(
             env, timestep_limit=timestep_limit, save_obs=True, random_stream=rs)
         task_ob_stat.increment(obs.sum(axis=0), np.square(obs).sum(axis=0), len(obs))
     else:
-        rollout_rews, rollout_len = policy.rollout(env, timestep_limit=timestep_limit, random_stream=rs)
+        # ignore last value --> novelty vector
+        rollout_rews, rollout_len, _ = policy.rollout(env, timestep_limit=timestep_limit, random_stream=rs)
     return rollout_rews, rollout_len
 
 
