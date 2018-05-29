@@ -512,3 +512,70 @@ class GAAtariPolicy(Policy):
             return rews, t, np.array(obs), np.array(novelty_vector)
         return rews, t, np.array(novelty_vector)
 
+# a custom policy for GA training on Genesis games
+class GAGenesisPolicy(GAAtariPolicy):
+
+    # TODO revisit this code and find out whether other network layouts might be used as well
+    def _make_net(self, o):
+        x = o
+        x = self.nonlin(U.conv(x, name='conv1', num_outputs=16, kernel_size=8, stride=4, std=1.0))
+        x = self.nonlin(U.conv(x, name='conv2', num_outputs=32, kernel_size=4, stride=2, std=1.0))
+
+        x = U.flattenallbut0(x)
+        x = self.nonlin(U.dense(x, 256, 'fc', U.normc_initializer(1.0), std=1.0))
+
+        a = U.dense(x, self.num_actions, 'out', U.normc_initializer(self.ac_init_std), std=self.ac_init_std)
+        # added final softmax layer over each of the actions
+        a = tf.nn.softmax(a)
+        return a
+
+    # Dont add random noise since action space is discrete
+    def act(self, train_vars, random_stream=None):
+        ary = self._act(train_vars)
+        # round up the softmax layer results to get a vector of the type [0,0,0...,1] etc.
+        ary = np.rint(ary)
+        ary = ary.astype(np.int).tolist()
+        return ary
+
+    def rollout(self, env, *, render=False, timestep_limit=None, save_obs=False, random_stream=None, worker_stats=None, policy_seed=None):
+        """
+        If random_stream is provided, the rollout will take noisy actions with noise drawn from that stream.
+        Otherwise, no action noise will be added.
+        """
+        env_timestep_limit = env.spec.tags.get('wrapper_config.TimeLimit.max_episode_steps')
+        timestep_limit = env_timestep_limit if timestep_limit is None else min(timestep_limit, env_timestep_limit)
+        rews = []; novelty_vector = []
+        rollout_details = {}
+        t = 0
+
+        if save_obs:
+            obs = []
+
+        if policy_seed:
+            env.seed(policy_seed)
+            np.random.seed(policy_seed)
+            if random_stream:
+                random_stream.seed(policy_seed)
+
+        ob = env.reset()
+        for _ in range(timestep_limit):
+            ac = self.act(ob[None], random_stream=random_stream)[0]
+
+            if save_obs:
+                obs.append(ob)
+            ob, rew, done, info = env.step(ac)
+            rews.append(rew)
+
+            t += 1
+            if render:
+                env.render()
+            if done:
+                break
+
+        # Copy over final positions to the max timesteps
+        rews = np.array(rews, dtype=np.float32)
+        # necessary change: we don't get ram information from the environment, so put 0 here
+        novelty_vector = 0
+        if save_obs:
+            return rews, t, np.array(obs), np.array(novelty_vector)
+        return rews, t, np.array(novelty_vector)

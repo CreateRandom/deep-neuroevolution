@@ -6,6 +6,7 @@ import sys
 
 import click
 
+from util.retro_registry import register_all
 from .dist import RelayClient
 from .es import run_master, run_worker, SharedNoiseTable
 
@@ -46,6 +47,9 @@ def import_algo(name):
 @click.option('--master_socket_path', required=True)
 @click.option('--log_dir')
 def master(algo, exp_str, exp_file, master_socket_path, log_dir):
+    # register retro games
+    register_all(20000)
+
     # Start the master
     assert (exp_str is None) != (exp_file is None), 'Must provide exp_str xor exp_file to the master'
     if exp_str:
@@ -68,6 +72,9 @@ def master(algo, exp_str, exp_file, master_socket_path, log_dir):
 @click.option('--relay_socket_path', required=True)
 @click.option('--num_workers', type=int, default=0)
 def workers(algo, master_host, master_port, relay_socket_path, num_workers):
+    # register retro games
+    register_all(20000)
+
     # Start the relay
     master_redis_cfg = {'host': master_host, 'port': master_port}
     relay_redis_cfg = {'unix_socket_path': relay_socket_path}
