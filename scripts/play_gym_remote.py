@@ -13,7 +13,6 @@ from click._unicodefun import click
 def main(policy_file,extra_kwargs):
     import tensorflow as tf
     from es_distributed.policies import GAGenesisPolicy
-    import retro
 
     print('connecting to remote environment')
     env = grc.RemoteEnv('tmp/sock')

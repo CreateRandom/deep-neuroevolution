@@ -12,7 +12,7 @@
   },
   "population_size": 10,
   "num_elites": 1,
-  "env_id": "Sonic1-v0",
+  "env_id": "Sonic1-1-v0",
   "policy": {
     "args" : {
       "nonlin_type": "relu"

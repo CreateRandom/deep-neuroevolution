@@ -12,6 +12,20 @@ def setup(exp, single_threaded):
     from . import policies, tf_util
 
     config = Config(**exp['config'])
+    # from util.MultiStateEnv import MultiStateEnv
+    #
+    # env = MultiStateEnv(game='SonicTheHedgehog-Genesis',
+    #                     states=['GreenHillZone.Act1', 'GreenHillZone.Act2', 'GreenHillZone.Act3',
+    #                             'LabyrinthZone.Act1', 'LabyrinthZone.Act2', 'LabyrinthZone.Act3',
+    #                             'MarbleZone.Act1', 'MarbleZone.Act2', 'MarbleZone.Act3',
+    #                             'ScrapBrainZone.Act1', 'ScrapBrainZone.Act2',
+    #                             'SpringYardZone.Act1', 'SpringYardZone.Act2', 'SpringYardZone.Act3',
+    #                             'StarLightZone.Act1', 'StarLightZone.Act2', 'StarLightZone.Act3'])
+    #
+    # from gym.wrappers.time_limit import TimeLimit
+    # env = TimeLimit(env,max_episode_steps=env.spec.max_episode_steps,
+    #                     max_episode_seconds=env.spec.max_episode_seconds)
+
     env = gym.make(exp['env_id'])
     if exp['env_id'].endswith('NoFrameskip-v4'):
         from .atari_wrappers import wrap_deepmind

@@ -5,8 +5,8 @@ import time
 import h5py
 import numpy as np
 import tensorflow as tf
+# this seems to be causing an error sometimes with an improper cuDNN set-up :(
 import tensorflow.contrib.layers as layers
-
 from . import tf_util as U
 
 logger = logging.getLogger(__name__)

@@ -44,11 +44,15 @@ def run_master(master_redis_cfg, log_dir, exp):
                 env.observation_space.shape,
                 eps=1e-2  # eps to prevent dividing by zero at the beginning when computing mean/stdev
             )
+        if policy.needs_ref_batch:
+            ref_batch = get_ref_batch(env, batch_size=128)
+            policy.set_ref_batch(ref_batch)
 
         curr_task_id = master.declare_task(Task(
             params=theta,
             ob_mean=ob_stat.mean if policy.needs_ob_stat else None,
             ob_std=ob_stat.std if policy.needs_ob_stat else None,
+            ref_batch=ref_batch if policy.needs_ref_batch else None,
             timestep_limit=tslimit
         ))
         tlogger.log('********** Iteration {} **********'.format(curr_task_id))
@@ -177,10 +181,13 @@ def run_worker(master_redis_cfg, relay_redis_cfg, noise, *, min_task_runtime=.2)
         if policy.needs_ob_stat:
             policy.set_ob_stat(task_data.ob_mean, task_data.ob_std)
 
+        if policy.needs_ref_batch:
+            policy.set_ref_batch(task_data.ref_batch)
+
         if rs.rand() < config.eval_prob:
             # Evaluation: noiseless weights and noiseless actions
             policy.set_trainable_flat(task_data.params)
-            eval_rews, eval_length = policy.rollout(env)  # eval rollouts don't obey task_data.timestep_limit
+            eval_rews, eval_length, _ = policy.rollout(env)  # eval rollouts don't obey task_data.timestep_limit
             eval_return = eval_rews.sum()
             logger.info('Eval result: task={} return={:.3f} length={}'.format(task_id, eval_return, eval_length))
             worker.push_result(task_id, Result(
