@@ -41,9 +41,21 @@ state_dict = {
 # TODO: add other games and other states (i.e. game levels to make them usable)
 def register_all(max_episode_steps):
 
-    register(id='Sonic1-1-v0',
+    register(id='Sonic1-v0',
              entry_point='util.MultiStateEnv:MultiStateEnv',
              kwargs={'game': 'SonicTheHedgehog-Genesis', 'states' : state_dict['SonicTheHedgehog-Genesis']},
+             max_episode_steps=max_episode_steps
+             )
+
+    register(id='Sonic2-v0',
+             entry_point='util.MultiStateEnv:MultiStateEnv',
+             kwargs={'game': 'SonicTheHedgehog2-Genesis', 'states': state_dict['SonicTheHedgehog2-Genesis']},
+             max_episode_steps=max_episode_steps
+             )
+
+    register(id='Sonic3-v0',
+             entry_point='util.MultiStateEnv:MultiStateEnv',
+             kwargs={'game': 'SonicAndKnuckles3-Genesis', 'states': state_dict['SonicAndKnuckles3-Genesis']},
              max_episode_steps=max_episode_steps
              )
 

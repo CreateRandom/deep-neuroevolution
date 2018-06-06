@@ -15,9 +15,9 @@ def main(env_id, policy_file, record, stochastic, extra_kwargs):
     from es_distributed.atari_wrappers import ScaledFloatFrame, wrap_deepmind
     from es_distributed.es import get_ref_batch
     import numpy as np
-
+    max_episode_steps = 4500
     # register retro games with max steps per episode to be played out
-    register_all(max_episode_steps=20000)
+    register_all(max_episode_steps=max_episode_steps)
 
     is_atari_policy = True
 

@@ -10,6 +10,7 @@ from util.retro_registry import register_all
 from .dist import RelayClient
 from .es import run_master, run_worker, SharedNoiseTable
 
+max_episode_steps = 4500
 
 def mkdir_p(path):
     try:
@@ -48,7 +49,7 @@ def import_algo(name):
 @click.option('--log_dir')
 def master(algo, exp_str, exp_file, master_socket_path, log_dir):
     # register retro games
-    register_all(20000)
+    register_all(max_episode_steps=max_episode_steps)
 
     # Start the master
     assert (exp_str is None) != (exp_file is None), 'Must provide exp_str xor exp_file to the master'
@@ -73,7 +74,7 @@ def master(algo, exp_str, exp_file, master_socket_path, log_dir):
 @click.option('--num_workers', type=int, default=0)
 def workers(algo, master_host, master_port, relay_socket_path, num_workers):
     # register retro games
-    register_all(20000)
+    register_all(max_episode_steps=max_episode_steps)
 
     # Start the relay
     master_redis_cfg = {'host': master_host, 'port': master_port}
