@@ -1,4 +1,6 @@
 import click
+
+from util import sonic_util
 from util.retro_registry import register_all
 
 @click.command()
@@ -7,6 +9,7 @@ from util.retro_registry import register_all
 @click.option('--record', is_flag=True)
 @click.option('--stochastic', is_flag=True)
 @click.option('--extra_kwargs')
+
 def main(env_id, policy_file, record, stochastic, extra_kwargs):
     import gym
     from gym import wrappers
@@ -22,6 +25,9 @@ def main(env_id, policy_file, record, stochastic, extra_kwargs):
     is_atari_policy = True
 
     env = gym.make(env_id)
+    # wrap this such that only meaningful actions in Sonic can be performed
+    env = sonic_util.SonicDiscretizer(env)
+
     #if is_atari_policy:
        # env = wrap_deepmind(env)
 
