@@ -98,7 +98,7 @@ def run_master(master_redis_cfg, log_dir, exp):
     num_elites = exp['num_elites']
     population_score = np.array([])
 
-    time_to_stop = datetime.now() + timedelta(minutes=20)
+    time_to_stop = datetime.now() + timedelta(hours=24)
 
     # keep doling out tasks till you're out of time
     while datetime.now() < time_to_stop:
