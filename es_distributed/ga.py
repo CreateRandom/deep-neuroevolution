@@ -1,11 +1,15 @@
+from datetime import datetime, timedelta
+from threading import Thread
+
 from gym.envs import register
 
+from scripts.run_comp import evaluate_policy
 from util import sonic_util
 from .es import *
-
+import losswise
 
 GATask = namedtuple('GATask', ['params', 'population', 'ob_mean', 'ob_std', 'timestep_limit'])
-
+EmptyTask = namedtuple('EmptyTask',[])
 
 def setup(exp, single_threaded):
     import gym
@@ -26,7 +30,6 @@ def setup(exp, single_threaded):
     # from gym.wrappers.time_limit import TimeLimit
     # env = TimeLimit(env,max_episode_steps=env.spec.max_episode_steps,
     #                     max_episode_seconds=env.spec.max_episode_seconds)
-
 
     env = gym.make(exp['env_id'])
     env = sonic_util.AllowBacktracking(env)
@@ -54,6 +57,11 @@ def rollout_and_update_ob_stat(policy, env, timestep_limit, rs, task_ob_stat, ca
 
 
 def run_master(master_redis_cfg, log_dir, exp):
+    losswise.set_api_key('W5BWWF7RP')  # api_key for 'NC'
+    # tracking stuff
+    session = losswise.Session(tag='online_performance')
+    graph = session.graph('reward', kind='max')
+
     logger.info('run_master: {}'.format(locals()))
     from . import tabular_logger as tlogger
     logger.info('Tabular logging to {}'.format(log_dir))
@@ -90,7 +98,10 @@ def run_master(master_redis_cfg, log_dir, exp):
     num_elites = exp['num_elites']
     population_score = np.array([])
 
-    while True:
+    time_to_stop = datetime.now() + timedelta(minutes=20)
+
+    # keep doling out tasks till you're out of time
+    while datetime.now() < time_to_stop:
         step_tstart = time.time()
         theta = policy.get_trainable_flat()
         assert theta.dtype == np.float32
@@ -114,7 +125,8 @@ def run_master(master_redis_cfg, log_dir, exp):
         # Pop off results for the current task
         curr_task_results, eval_rets, eval_lens, worker_ids = [], [], [], []
         num_results_skipped, num_episodes_popped, num_timesteps_popped, ob_count_this_batch = 0, 0, 0, 0
-        while num_episodes_popped < config.episodes_per_batch or num_timesteps_popped < config.timesteps_per_batch:
+        # break out of the inner loop as well if time's up
+        while datetime.now() < time_to_stop and (num_episodes_popped < config.episodes_per_batch or num_timesteps_popped < config.timesteps_per_batch):
             # Wait for a result
             task_id, result = master.pop_result()
             assert isinstance(task_id, int) and isinstance(result, Result)
@@ -149,84 +161,101 @@ def run_master(master_redis_cfg, log_dir, exp):
                 else:
                     num_results_skipped += 1
 
-        # Compute skip fraction
-        frac_results_skipped = num_results_skipped / (num_results_skipped + len(curr_task_results))
-        if num_results_skipped > 0:
-            logger.warning('Skipped {} out of date results ({:.2f}%)'.format(
-                num_results_skipped, 100. * frac_results_skipped))
+        # compute the results only if the time hasn't been exceeded
+        if datetime.now() < time_to_stop:
 
-        # Assemble results + elite
-        noise_inds_n = list(population[:num_elites])
-        returns_n2 = list(population_score[:num_elites])
-        for r in curr_task_results:
-            noise_inds_n.extend(r.noise_inds_n)
-            returns_n2.extend(r.returns_n2)
-        noise_inds_n = np.array(noise_inds_n)
-        returns_n2 = np.array(returns_n2)
-        lengths_n2 = np.array([r.lengths_n2 for r in curr_task_results])
-        # Process returns
-        idx = np.argpartition(returns_n2, (-population_size, -1))[-1:-population_size-1:-1]
-        population = noise_inds_n[idx]
-        population_score = returns_n2[idx]
-        assert len(population) == population_size
-        assert np.max(returns_n2) == population_score[0]
+            # Compute skip fraction
+            frac_results_skipped = num_results_skipped / (num_results_skipped + len(curr_task_results))
+            if num_results_skipped > 0:
+                logger.warning('Skipped {} out of date results ({:.2f}%)'.format(
+                    num_results_skipped, 100. * frac_results_skipped))
 
-        print('Elite: {} score: {}'.format(population[0], population_score[0]))
-        policy.set_trainable_flat(noise.get(population[0][0], policy.num_params))
-        policy.reinitialize()
-        v = policy.get_trainable_flat()
+            # Assemble results + elite
+            noise_inds_n = list(population[:num_elites])
+            returns_n2 = list(population_score[:num_elites])
+            for r in curr_task_results:
+                noise_inds_n.extend(r.noise_inds_n)
+                returns_n2.extend(r.returns_n2)
+            noise_inds_n = np.array(noise_inds_n)
+            returns_n2 = np.array(returns_n2)
+            lengths_n2 = np.array([r.lengths_n2 for r in curr_task_results])
+            # Process returns
+            idx = np.argpartition(returns_n2, (-population_size, -1))[-1:-population_size-1:-1]
+            population = noise_inds_n[idx]
+            population_score = returns_n2[idx]
+            assert len(population) == population_size
+            assert np.max(returns_n2) == population_score[0]
 
-        for seed in population[0][1:]:
-            v += config.noise_stdev * noise.get(seed, policy.num_params)
-        policy.set_trainable_flat(v)
+            print('Elite: {} score: {}'.format(population[0], population_score[0]))
+            policy.set_trainable_flat(noise.get(population[0][0], policy.num_params))
+            policy.reinitialize()
+            v = policy.get_trainable_flat()
 
-        # Update number of steps to take
-        if adaptive_tslimit and (lengths_n2 == tslimit).mean() >= incr_tslimit_threshold:
-            old_tslimit = tslimit
-            tslimit = int(tslimit_incr_ratio * tslimit)
-            logger.info('Increased timestep limit from {} to {}'.format(old_tslimit, tslimit))
+            for seed in population[0][1:]:
+                v += config.noise_stdev * noise.get(seed, policy.num_params)
+            policy.set_trainable_flat(v)
 
-        step_tend = time.time()
-        tlogger.record_tabular("EpRewMax", returns_n2.max())
-        tlogger.record_tabular("EpRewMean", returns_n2.mean())
-        tlogger.record_tabular("EpRewStd", returns_n2.std())
-        tlogger.record_tabular("EpLenMean", lengths_n2.mean())
+            # Update number of steps to take
+            if adaptive_tslimit and (lengths_n2 == tslimit).mean() >= incr_tslimit_threshold:
+                old_tslimit = tslimit
+                tslimit = int(tslimit_incr_ratio * tslimit)
+                logger.info('Increased timestep limit from {} to {}'.format(old_tslimit, tslimit))
 
-        tlogger.record_tabular("EvalEpRewMean", np.nan if not eval_rets else np.mean(eval_rets))
-        tlogger.record_tabular("EvalEpRewMedian", np.nan if not eval_rets else np.median(eval_rets))
-        tlogger.record_tabular("EvalEpRewStd", np.nan if not eval_rets else np.std(eval_rets))
-        tlogger.record_tabular("EvalEpLenMean", np.nan if not eval_rets else np.mean(eval_lens))
-        tlogger.record_tabular("EvalPopRank", np.nan if not eval_rets else (
-            np.searchsorted(np.sort(returns_n2.ravel()), eval_rets).mean() / returns_n2.size))
-        tlogger.record_tabular("EvalEpCount", len(eval_rets))
+            step_tend = time.time()
+            tlogger.record_tabular("EpRewMax", returns_n2.max())
+            tlogger.record_tabular("EpRewMean", returns_n2.mean())
+            tlogger.record_tabular("EpRewStd", returns_n2.std())
+            tlogger.record_tabular("EpLenMean", lengths_n2.mean())
+            graph.append(curr_task_id,{'meanReward': returns_n2.mean(), 'maxReward':returns_n2.max()})
+            tlogger.record_tabular("EvalEpRewMean", np.nan if not eval_rets else np.mean(eval_rets))
+            tlogger.record_tabular("EvalEpRewMedian", np.nan if not eval_rets else np.median(eval_rets))
+            tlogger.record_tabular("EvalEpRewStd", np.nan if not eval_rets else np.std(eval_rets))
+            tlogger.record_tabular("EvalEpLenMean", np.nan if not eval_rets else np.mean(eval_lens))
+            tlogger.record_tabular("EvalPopRank", np.nan if not eval_rets else (
+                np.searchsorted(np.sort(returns_n2.ravel()), eval_rets).mean() / returns_n2.size))
+            tlogger.record_tabular("EvalEpCount", len(eval_rets))
 
-        tlogger.record_tabular("Norm", float(np.square(policy.get_trainable_flat()).sum()))
+            tlogger.record_tabular("Norm", float(np.square(policy.get_trainable_flat()).sum()))
 
-        tlogger.record_tabular("EpisodesThisIter", lengths_n2.size)
-        tlogger.record_tabular("EpisodesSoFar", episodes_so_far)
-        tlogger.record_tabular("TimestepsThisIter", lengths_n2.sum())
-        tlogger.record_tabular("TimestepsSoFar", timesteps_so_far)
+            tlogger.record_tabular("EpisodesThisIter", lengths_n2.size)
+            tlogger.record_tabular("EpisodesSoFar", episodes_so_far)
+            tlogger.record_tabular("TimestepsThisIter", lengths_n2.sum())
+            tlogger.record_tabular("TimestepsSoFar", timesteps_so_far)
 
-        num_unique_workers = len(set(worker_ids))
-        tlogger.record_tabular("UniqueWorkers", num_unique_workers)
-        tlogger.record_tabular("UniqueWorkersFrac", num_unique_workers / len(worker_ids))
-        tlogger.record_tabular("ResultsSkippedFrac", frac_results_skipped)
-        tlogger.record_tabular("ObCount", ob_count_this_batch)
+            num_unique_workers = len(set(worker_ids))
+            tlogger.record_tabular("UniqueWorkers", num_unique_workers)
+            tlogger.record_tabular("UniqueWorkersFrac", num_unique_workers / len(worker_ids))
+            tlogger.record_tabular("ResultsSkippedFrac", frac_results_skipped)
+            tlogger.record_tabular("ObCount", ob_count_this_batch)
 
-        tlogger.record_tabular("TimeElapsedThisIter", step_tend - step_tstart)
-        tlogger.record_tabular("TimeElapsed", step_tend - tstart)
-        tlogger.dump_tabular()
+            tlogger.record_tabular("TimeElapsedThisIter", step_tend - step_tstart)
+            tlogger.record_tabular("TimeElapsed", step_tend - tstart)
+            tlogger.dump_tabular()
 
-        # if config.snapshot_freq != 0 and curr_task_id % config.snapshot_freq == 0:
-        if config.snapshot_freq != 0:
-            import os.path as osp
-            filename = 'snapshot_iter{:05d}_rew{}.h5'.format(
-                curr_task_id,
-                np.nan if not eval_rets else int(np.mean(eval_rets))
-            )
-            assert not osp.exists(filename)
-            policy.save(filename)
-            tlogger.log('Saved snapshot {}'.format(filename))
+            # if config.snapshot_freq != 0 and curr_task_id % config.snapshot_freq == 0:
+            if config.snapshot_freq != 0:
+                import os.path as osp
+                filename = 'snapshot_iter{:05d}_rew{}.h5'.format(
+                    curr_task_id,
+                    np.nan if not eval_rets else int(np.mean(eval_rets))
+                )
+                assert not osp.exists(filename)
+                policy.save(filename)
+                tlogger.log('Saved snapshot {}'.format(filename))
+
+    # thread = Thread(target=evaluate_policy_on_test, args=(policy,curr_task_id,graph))
+    # thread.start()
+
+    # hammer out this empty task to stop the workers
+    curr_task_id = master.declare_task(EmptyTask())
+    session.done()
+
+
+# spin this up on a separate thread in order not to clog up the master
+def evaluate_policy_on_test(policy, iteration, graph):
+    rewards, ts = evaluate_policy(policy)
+    print(rewards)
+    graph.append(iteration, {'mean_reward': np.mean(rewards)})
 
 
 def run_worker(master_redis_cfg, relay_redis_cfg, noise, *, min_task_runtime=.2):
@@ -243,6 +272,10 @@ def run_worker(master_redis_cfg, relay_redis_cfg, noise, *, min_task_runtime=.2)
     while True:
         task_id, task_data = worker.get_current_task()
         task_tstart = time.time()
+        # stop once you get do to an empty task
+        if(isinstance(task_data,EmptyTask)):
+            break
+
         assert isinstance(task_id, int) and isinstance(task_data, GATask)
         if policy.needs_ob_stat:
             policy.set_ob_stat(task_data.ob_mean, task_data.ob_std)
@@ -272,7 +305,8 @@ def run_worker(master_redis_cfg, relay_redis_cfg, noise, *, min_task_runtime=.2)
 
             while not noise_inds or time.time() - task_tstart < min_task_runtime:
                 if len(task_data.population) > 0:
-                    seeds = list(task_data.population[rs.randint(len(task_data.population))]) + [noise.sample_index(rs, policy.num_params)]
+                    seeds = list(task_data.population[rs.randint(len(task_data.population))]) + [
+                        noise.sample_index(rs, policy.num_params)]
                 else:
                     seeds = [noise.sample_index(rs, policy.num_params)]
 

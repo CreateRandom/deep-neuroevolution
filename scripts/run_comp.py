@@ -12,6 +12,10 @@ from gym import wrappers
 @click.option('--extra_kwargs')
 
 def main(policy_file, record, stochastic, extra_kwargs):
+    return evaluate_policy(policy_file)
+
+
+def evaluate_policy(policy_file):
 
     import tensorflow as tf
     from es_distributed.policies import MujocoPolicy, ESAtariPolicy, GAAtariPolicy, GAGenesisPolicy
@@ -19,43 +23,36 @@ def main(policy_file, record, stochastic, extra_kwargs):
     from es_distributed.es import get_ref_batch
     import numpy as np
     max_episode_steps = 4500
-    max_steps_per_level = 10000
     # register retro games with max steps per episode to be played out
     register_all(max_episode_steps=max_episode_steps)
 
     is_atari_policy = True
 
     all_rewards = []
+    all_lengths = []
+
     with tf.Session():
         # load the policy just once
-        pi = GAGenesisPolicy.Load(policy_file, extra_kwargs=extra_kwargs)
-        # play each env for a number of steps, recording the step limits
-        for count in range(1, 11):
+        pi = GAGenesisPolicy.Load(policy_file)
+        # load the policy just once
+        # play each env
+        for count in range(1, 10):
             id = 'Test-v' + str(count)
-            env = make_env(id,record,extra_kwargs)
+            env = make_env(id)
 
             if pi.needs_ref_batch:
                 pi.set_ref_batch(get_ref_batch(env, batch_size=128))
-            total_steps = 0
-            rewards = []
-
-          #  while total_steps < max_steps_per_level:
+            #  while total_steps < max_steps_per_level:
             # play on this env
-            rews, t, novelty_vector = pi.rollout(env, render=False, random_stream=np.random if stochastic else None)
-            total_steps = total_steps + t
-            rewards.append(rews.sum())
-
-            print('return={:.4f} len={}'.format(rews.sum(), t))
-
-            if record:
-                env.close()
-                return
+            rews, t, novelty_vector = pi.rollout(env, render=False)
+            all_lengths.append(t)
             # store the list of rewards
-            all_rewards.append(rewards)
+            all_rewards.append(rews.sum())
             del env
 
-    # save rewards
-    print(np.mean(all_rewards))
+        # save rewards
+
+    return all_rewards, all_lengths
 
 def make_env(env_id, record=False, extra_kwargs=None):
     env = gym.make(env_id)
