@@ -1,7 +1,7 @@
 {
   "config": {
     "calc_obstat_prob": 0.0,
-    "episodes_per_batch": 480,
+    "episodes_per_batch": 240,
     "eval_prob": 0.01,
     "l2coeff": 0.005,
     "noise_stdev": 0.005,
@@ -12,7 +12,7 @@
   },
   "population_size": 10,
   "num_elites": 1,
-  "env_id": "Sonic1-v0",
+  "env_id": "Test-v1",
   "policy": {
     "args" : {
       "nonlin_type": "relu"

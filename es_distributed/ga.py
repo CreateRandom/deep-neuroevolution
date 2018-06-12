@@ -3,7 +3,6 @@ from threading import Thread
 
 from gym.envs import register
 
-from scripts.run_comp import evaluate_policy
 from util import sonic_util
 from .es import *
 import losswise
@@ -249,13 +248,6 @@ def run_master(master_redis_cfg, log_dir, exp):
     # hammer out this empty task to stop the workers
     curr_task_id = master.declare_task(EmptyTask())
     session.done()
-
-
-# spin this up on a separate thread in order not to clog up the master
-def evaluate_policy_on_test(policy, iteration, graph):
-    rewards, ts = evaluate_policy(policy)
-    print(rewards)
-    graph.append(iteration, {'mean_reward': np.mean(rewards)})
 
 
 def run_worker(master_redis_cfg, relay_redis_cfg, noise, *, min_task_runtime=.2):
