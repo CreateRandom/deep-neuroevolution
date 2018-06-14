@@ -5,6 +5,9 @@ import losswise
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 import scripts.run_comp as run_comp
+from util.retro_registry import register_all
+
+
 class MyHandler(PatternMatchingEventHandler):
 
 
@@ -15,6 +18,9 @@ class MyHandler(PatternMatchingEventHandler):
         session = losswise.Session(tag='test_set_performance')
         self.graph = session.graph('reward', kind='max')
         self.it_counter = 0
+
+        max_episode_steps = 4500
+        register_all(max_episode_steps=max_episode_steps)
 
     # watch only for model files
     patterns = ["*.h5"]
@@ -30,7 +36,10 @@ class MyHandler(PatternMatchingEventHandler):
         """
         # evaluate the policy11
         print(event.src_path)  # print now only for debug
-        rewards, times = run_comp.evaluate_policy(event.src_path)
+        runner = run_comp.CompRunner()
+        rewards, times = runner.evaluate_policy(event.src_path)
+        del runner
+
         rew_dict = {}
         counter = 1
         for reward in rewards:

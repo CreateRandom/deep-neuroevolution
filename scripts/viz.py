@@ -25,8 +25,7 @@ def main(env_id, policy_file, record, stochastic, extra_kwargs):
     is_atari_policy = True
 
     env = gym.make(env_id)
-    # wrap this such that only meaningful actions in Sonic can be performed
-    env = sonic_util.SonicDiscretizer(env)
+    env = sonic_util.sonicize_env(env)
 
     #if is_atari_policy:
        # env = wrap_deepmind(env)
@@ -48,9 +47,9 @@ def main(env_id, policy_file, record, stochastic, extra_kwargs):
             
         while True:
             if is_atari_policy:
-                rews, t, novelty_vector = pi.rollout(env, render=True, random_stream=np.random if stochastic else None)
+                rews, t, score = pi.rollout(env, render=True, random_stream=np.random if stochastic else None)
             print('return={:.4f} len={}'.format(rews.sum(), t))
-
+            print(score)
             if record:
                 env.close()
                 return

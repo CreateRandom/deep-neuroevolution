@@ -37,6 +37,21 @@ class RewardScaler(gym.RewardWrapper):
     def reward(self, reward):
         return reward * 0.01
 
+class DeltaXReward(gym.Wrapper):
+    def __init__(self, env):
+        super(DeltaXReward, self).__init__(env)
+        self.last_x = 0
+
+    def reset(self, **kwargs): # pylint: disable=E0202
+        self.last_x = 0
+        return self.env.reset(**kwargs)
+
+    def step(self, action): # pylint: disable=E0202
+        obs, rew, done, info = self.env.step(action)
+        rew = info['x']- self.last_x
+        self.last_x = info['x']
+        return obs, rew, done, info
+
 class AllowBacktracking(gym.Wrapper):
     """
     Use deltas in max(X) as the reward, rather than deltas
@@ -60,3 +75,11 @@ class AllowBacktracking(gym.Wrapper):
         rew = max(0, self._cur_x - self._max_x)
         self._max_x = max(self._max_x, self._cur_x)
         return obs, rew, done, info
+
+
+def sonicize_env(env):
+    env = AllowBacktracking(env)
+    env = DeltaXReward(env)
+    # wrap this such that only meaningful actions in Sonic can be performed
+    env = SonicDiscretizer(env)
+    return env

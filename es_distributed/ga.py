@@ -31,9 +31,8 @@ def setup(exp, single_threaded):
     #                     max_episode_seconds=env.spec.max_episode_seconds)
 
     env = gym.make(exp['env_id'])
-    env = sonic_util.AllowBacktracking(env)
-    # add an action wrapper
-    env = sonic_util.SonicDiscretizer(env)
+    # change rewards and actions
+    env = sonic_util.sonicize_env(env)
 
     if exp['env_id'].endswith('NoFrameskip-v4'):
         from .atari_wrappers import wrap_deepmind

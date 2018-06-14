@@ -529,8 +529,8 @@ class GAGenesisPolicy(GAAtariPolicy):
         timestep_limit = env_timestep_limit if timestep_limit is None else min(timestep_limit, env_timestep_limit)
         rews = []; novelty_vector = []
         rollout_details = {}
-        t = 0
-
+        t, max_score = 0 , 0
+        max_perc = 0.0
         if save_obs:
             obs = []
 
@@ -545,13 +545,14 @@ class GAGenesisPolicy(GAAtariPolicy):
             ac = self.act(ob[None], random_stream=random_stream)[0]
             if save_obs:
                 obs.append(ob)
-            actions = [['LEFT'], ['RIGHT'], ['LEFT', 'DOWN'], ['RIGHT', 'DOWN'], ['DOWN'],
-                       ['DOWN', 'B'], ['B']]
-            # if the env is wrapped in an object that limits possible actions,
-            # select the action we want to use and then step
             ob, rew, done, info = env.step(ac)
             rews.append(rew)
-
+            if(info['score'] > max_score):
+                # for unknown reasons, this is returned as a 10th of the on-screen value
+                max_score = info['score'] * 10
+            if(info['screen_x_end'] > 0):
+                percentage_of_level = float(info['x']) / float(info['screen_x_end'])
+                max_perc = max(max_perc,percentage_of_level)
             t += 1
             if render:
                 env.render()
@@ -560,8 +561,7 @@ class GAGenesisPolicy(GAAtariPolicy):
 
         # Copy over final positions to the max timesteps
         rews = np.array(rews, dtype=np.float32)
-        # necessary change: we don't get ram information from the environment, so put 0 here
-        novelty_vector = 0
-        if save_obs:
-            return rews, t, np.array(obs), np.array(novelty_vector)
-        return rews, t, np.array(novelty_vector)
+
+        result_dict = {'max_perc': max_perc, 'max_score' : max_score}
+
+        return rews, t, result_dict

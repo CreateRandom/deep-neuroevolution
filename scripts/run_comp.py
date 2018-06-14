@@ -28,15 +28,15 @@ def evaluate_policy(policy_file):
 
     is_atari_policy = True
 
-    all_rewards = []
+    all_scores = []
     all_lengths = []
-
+    all_percs = []
     with tf.Session():
         # load the policy just once
         pi = GAGenesisPolicy.Load(policy_file)
         # load the policy just once
         # play each env
-        for count in range(1, 10):
+        for count in range(1, 3):
             id = 'Test-v' + str(count)
             env = make_env(id)
 
@@ -44,19 +44,28 @@ def evaluate_policy(policy_file):
                 pi.set_ref_batch(get_ref_batch(env, batch_size=128))
             #  while total_steps < max_steps_per_level:
             # play on this env
-            rews, t, novelty_vector = pi.rollout(env, render=False)
+            rews, t, res_dict = pi.rollout(env, render=False)
             all_lengths.append(t)
             # store the list of rewards
-            all_rewards.append(rews.sum())
+            perc = res_dict['max_perc'] if 'max_perc' in res_dict else 0
+            all_percs.append(perc)
+            score = res_dict['max_score'] if 'max_score' in res_dict else 0
+
+            all_scores.append(score)
+
+          #  print(rews.sum())
+            print(all_percs)
             del env
 
-        # save rewards
+    # scores and how far Sonic got to the goal
+    print(np.mean(all_scores))
+    print(np.mean(all_percs))
 
-    return all_rewards, all_lengths
+    return all_scores, all_lengths
 
 def make_env(env_id, record=False, extra_kwargs=None):
     env = gym.make(env_id)
-    env = sonic_util.SonicDiscretizer(env)
+    env = sonic_util.sonicize_env(env)
 
     if record:
         import uuid
