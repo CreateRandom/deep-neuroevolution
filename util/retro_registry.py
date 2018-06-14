@@ -92,6 +92,20 @@ def register_all(max_episode_steps):
                     )
             count = count + 1
 
+    # register all test levels
+    count = 1
+    for game in all_state_dict.keys():
+        #for level in retro.list_states(game):
+        for level in all_state_dict[game]:
+
+            id = 'SingleSonic-v' + str(count)
+            register(id=id,
+                     entry_point='retro.retro_env:RetroEnv',
+                     kwargs={'game': game, 'state': level},
+                     max_episode_steps=max_episode_steps
+                    )
+            count = count + 1
+
     # # test register a retro game
     # register(id='Sonic1-1-v0',
     #          entry_point='retro.retro_env:RetroEnv',

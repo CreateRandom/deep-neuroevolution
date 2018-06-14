@@ -4,7 +4,7 @@
     "episodes_per_batch": 240,
     "eval_prob": 0.01,
     "l2coeff": 0.005,
-    "noise_stdev": 0.005,
+    "noise_stdev": 0.05,
     "snapshot_freq": 20,
     "timesteps_per_batch": 100,
     "return_proc_mode": "centered_rank",
@@ -12,7 +12,7 @@
   },
   "population_size": 10,
   "num_elites": 1,
-  "env_id": "Test-v1",
+  "env_id": "SingleSonic-v1",
   "policy": {
     "args" : {
       "nonlin_type": "relu"
