@@ -2,7 +2,7 @@
   "config": {
     "calc_obstat_prob": 0.0,
     "episodes_per_batch": 240,
-    "eval_prob": 0.01,
+    "eval_prob": 0.0,
     "l2coeff": 0.005,
     "noise_stdev": 0.05,
     "snapshot_freq": 20,
