@@ -5,6 +5,8 @@ Environments and wrappers for Sonic training.
 import gym
 import numpy as np
 import matplotlib.pyplot as plt
+from gym.spaces import Box
+
 
 class SonicDiscretizer(gym.ActionWrapper):
     """
@@ -77,6 +79,11 @@ class AllowBacktracking(gym.Wrapper):
         return obs, rew, done, info
 
 class BlackAndWhite(gym.ObservationWrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        # 1-d
+        tuple = modTupByIndex(self.observation_space.shape,2,1)
+        self.observation_space = Box(0, 255,tuple)
 
     def _observation(self, observation):
         obs = observation.copy()
@@ -103,3 +110,8 @@ def sonicize_env(env):
     # wrap this such that only meaningful actions in Sonic can be performed
     env = SonicDiscretizer(env)
     return env
+
+def modTupByIndex(tup, index, ins):
+    lst = list(tup)
+    lst[index] = ins
+    return tuple(lst)
