@@ -565,3 +565,74 @@ class GAGenesisPolicy(GAAtariPolicy):
         result_dict = {'max_perc': max_perc, 'max_score' : max_score}
 
         return rews, t, result_dict
+
+class GAGenesisDeepPolicy(GAGenesisPolicy):
+
+    def _make_net(self, o):
+        x = o
+        x = self.nonlin(U.conv(x, name='conv1', num_outputs=32, kernel_size=8, stride=4, std=1.0))
+        x = self.nonlin(U.conv(x, name='conv2', num_outputs=64, kernel_size=4, stride=2, std=1.0))
+        x = self.nonlin(U.conv(x, name='conv3', num_outputs=64, kernel_size=3, stride=1, std=1.0))
+
+        x = U.flattenallbut0(x)
+        x = self.nonlin(U.dense(x, 512, 'fc', U.normc_initializer(1.0), std=1.0))
+
+        a = U.dense(x, self.num_actions, 'out', U.normc_initializer(self.ac_init_std), std=self.ac_init_std)
+
+        return tf.argmax(a,1)
+
+
+class BaselinePolicy():
+    def __init__(self) -> None:
+        self.needs_ref_batch = False
+
+    def rollout(self, env, *, render=False, timestep_limit=None, save_obs=False, random_stream=None, worker_stats=None, policy_seed=None):
+        if not isinstance(env, ActionWrapper):
+            RuntimeError("Please use an action wrapper!")
+
+        """
+        If random_stream is provided, the rollout will take noisy actions with noise drawn from that stream.
+        Otherwise, no action noise will be added.
+        """
+        env_timestep_limit = env.spec.tags.get('wrapper_config.TimeLimit.max_episode_steps')
+        timestep_limit = env_timestep_limit if timestep_limit is None else min(timestep_limit, env_timestep_limit)
+        rews = []; novelty_vector = []
+        rollout_details = {}
+        t, max_score = 0 , 0
+        max_perc = 0.0
+        if save_obs:
+            obs = []
+
+        if policy_seed:
+            env.seed(policy_seed)
+            np.random.seed(policy_seed)
+            if random_stream:
+                random_stream.seed(policy_seed)
+
+        ob = env.reset()
+        for _ in range(timestep_limit):
+            # right: 2/3, jump 1/3
+            ac = np.random.choice([1,6],p=[0.66,0.34])#env.action_space.sample()
+
+            if save_obs:
+                obs.append(ob)
+            ob, rew, done, info = env.step(ac)
+            rews.append(rew)
+            if(info['score'] > max_score):
+                # for unknown reasons, this is returned as a 10th of the on-screen value
+                max_score = info['score'] * 10
+            if(info['screen_x_end'] > 0):
+                percentage_of_level = float(info['x']) / float(info['screen_x_end'])
+                max_perc = max(max_perc,percentage_of_level)
+            t += 1
+            if render:
+                env.render()
+            if done:
+                break
+
+        # Copy over final positions to the max timesteps
+        rews = np.array(rews, dtype=np.float32)
+
+        result_dict = {'max_perc': max_perc, 'max_score' : max_score}
+
+        return rews, t, result_dict
