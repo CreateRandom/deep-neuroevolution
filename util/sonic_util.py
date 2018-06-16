@@ -4,7 +4,7 @@ Environments and wrappers for Sonic training.
 
 import gym
 import numpy as np
-
+import matplotlib.pyplot as plt
 
 class SonicDiscretizer(gym.ActionWrapper):
     """
@@ -76,8 +76,28 @@ class AllowBacktracking(gym.Wrapper):
         self._max_x = max(self._max_x, self._cur_x)
         return obs, rew, done, info
 
+class BlackAndWhite(gym.ObservationWrapper):
+
+    def _observation(self, observation):
+        obs = observation.copy()
+        # remove the score field, replace with white box
+        obs[:51,:130,:] = np.ones((51,130,3)) * 255
+        obs = self.rgb2gray(obs)
+        obs = self.simple_threshold(obs,110)
+
+#        plt.imshow(obs, aspect="auto",cmap='gray')
+#        plt.show()
+
+        return obs
+
+    def rgb2gray(self,rgb):
+        return np.dot(rgb[...,:3], [0.299, 0.587, 0.114])
+
+    def simple_threshold(self, im, threshold=128):
+        return ((im > threshold) * 255).astype("uint8")
 
 def sonicize_env(env):
+    env = BlackAndWhite(env)
     env = AllowBacktracking(env)
     env = DeltaXReward(env)
     # wrap this such that only meaningful actions in Sonic can be performed
