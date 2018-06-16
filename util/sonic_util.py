@@ -91,7 +91,7 @@ class BlackAndWhite(gym.ObservationWrapper):
         obs[:51,:130,:] = np.ones((51,130,3)) * 255
         obs = self.rgb2gray(obs)
         obs = self.simple_threshold(obs,110)
-
+        obs = obs.reshape((224,320,1))
 #        plt.imshow(obs, aspect="auto",cmap='gray')
 #        plt.show()
 
