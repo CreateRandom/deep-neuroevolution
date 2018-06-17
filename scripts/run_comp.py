@@ -4,6 +4,7 @@ import click
 import numpy as np
 import pandas as pd
 
+from es_distributed.policies import BaselinePolicy
 from util import sonic_util
 from util.retro_registry import register_all
 import gym
@@ -12,6 +13,7 @@ import gym
 @click.argument('policy_file')
 
 @click.option('--include_test', is_flag=True)
+
 @click.option('--extra_kwargs')
 
 def main(train_level, policy_file, include_test, extra_kwargs):
@@ -29,19 +31,20 @@ def main(train_level, policy_file, include_test, extra_kwargs):
     else:
         to_evaluate.append(policy_file)
 
+    to_evaluate.sort()
     train_perf = []
     test_perf = []
-
+    n_rep = 5
 
     # evaluate on this level first
     for policy_file_path in to_evaluate:
         print('Scoring ' + policy_file_path)
-        all_scores, all_percs, all_lengths, all_rewards = evaluate_policy_on_levels(policy_file_path,[train_level])
+        all_scores, all_percs, all_lengths, all_rewards = evaluate_policy_on_levels(policy_file_path,[train_level],n_rep)
         perf =[all_scores,all_percs,all_lengths,all_rewards]
         train_perf.append(perf)
         # if test set performance is to be measured too
         if(include_test):
-            all_scores, all_percs, all_lengths, all_rewards = evaluate_policy_on_test_set(policy_file_path)
+            all_scores, all_percs, all_lengths, all_rewards = evaluate_policy_on_test_set(policy_file_path,n_rep)
             perf = [np.mean(all_scores), np.mean(all_percs), np.mean(all_lengths), np.mean(all_rewards)]
             test_perf.append(perf)
 
@@ -57,14 +60,14 @@ def main(train_level, policy_file, include_test, extra_kwargs):
 from gym import wrappers
 
 
-def evaluate_policy_on_test_set(policy_file):
+def evaluate_policy_on_test_set(policy_file,n_rep):
     ids = []
     for count in range(1, 11):
         ids.append('Test-v' + str(count))
 
-    return evaluate_policy_on_levels(policy_file,ids)
+    return evaluate_policy_on_levels(policy_file,ids,n_rep)
 
-def evaluate_policy_on_levels(policy_file,ids):
+def evaluate_policy_on_levels(policy_file,ids,n_rep):
 
     import tensorflow as tf
     from es_distributed.policies import MujocoPolicy, ESAtariPolicy, GAAtariPolicy, GAGenesisPolicy
@@ -82,27 +85,43 @@ def evaluate_policy_on_levels(policy_file,ids):
     tf.reset_default_graph()
 
     with tf.Session():
-        # load the policy just once
-        pi = GAGenesisPolicy.Load(policy_file)
+        # create a baseline policy
+        if policy_file == 'baseline':
+            pi = BaselinePolicy()
+        else:
+            # load the policy just once
+            pi = GAGenesisPolicy.Load(policy_file)
         # load the policy just once
         # play each env
         for id in ids:
             env = make_env(id)
 
-            if pi.needs_ref_batch:
-                pi.set_ref_batch(get_ref_batch(env, batch_size=128))
-            #  while total_steps < max_steps_per_level:
-            # play on this env
-            rews, t, res_dict = pi.rollout(env, render=False)
-            all_lengths.append(t)
-            # store the list of rewards
-            perc = res_dict['max_perc'] if 'max_perc' in res_dict else 0
-            all_percs.append(perc)
-            score = res_dict['max_score'] if 'max_score' in res_dict else 0
+            temp_all_scores = []
+            temp_all_lengths = []
+            temp_all_percs = []
+            temp_all_rewards = []
 
-            all_scores.append(score)
-            all_rewards.append(rews.sum())
+            for i in range(0,n_rep):
+
+                if pi.needs_ref_batch:
+                    pi.set_ref_batch(get_ref_batch(env, batch_size=128))
+                # play on this env
+                rews, t, res_dict = pi.rollout(env, render=False)
+                temp_all_lengths.append(t)
+                # store the list of rewards
+                perc = res_dict['max_perc'] if 'max_perc' in res_dict else 0
+                temp_all_percs.append(perc)
+                score = res_dict['max_score'] if 'max_score' in res_dict else 0
+                temp_all_scores.append(score)
+                temp_all_rewards.append(rews.sum())
             del env
+
+            print(temp_all_percs)
+
+            all_scores.append(np.mean(temp_all_scores))
+            all_rewards.append(np.mean(temp_all_rewards))
+            all_lengths.append(np.mean(temp_all_lengths))
+            all_percs.append(np.mean(temp_all_percs))
 
     # scores, how far Sonic got to the goal, level length, and in-game score
     if len(all_scores) == 1:
