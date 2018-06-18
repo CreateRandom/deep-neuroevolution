@@ -94,7 +94,9 @@ def register_all(max_episode_steps):
 
     # register all test levels
     count = 1
+   # game_list = ['SonicTheHedgehog-Genesis', 'SonicTheHedgehog2-Genesis','SonicAndKnuckles3-Genesis']
     for game in all_state_dict.keys():
+        print(game)
         #for level in retro.list_states(game):
         for level in all_state_dict[game]:
 
