@@ -11,12 +11,12 @@ import gym
 @click.command()
 @click.argument('train_level')
 @click.argument('policy_file')
-
+@click.argument('storage')
 @click.option('--include_test', is_flag=True)
 
 @click.option('--extra_kwargs')
 
-def main(train_level, policy_file, include_test, extra_kwargs):
+def main(train_level, policy_file, storage, include_test, extra_kwargs):
     max_episode_steps = 4500
     # register retro games with max steps per episode to be played out
     register_all(max_episode_steps=max_episode_steps)
@@ -34,28 +34,38 @@ def main(train_level, policy_file, include_test, extra_kwargs):
     to_evaluate.sort()
     train_perf = []
     test_perf = []
-    n_rep = 5
+    # how often to repeat scoring
+    n_rep = 1
+    # check every nth policy on the test set
+    test_eval_interval = 4
 
+    counter = 0
     # evaluate on this level first
     for policy_file_path in to_evaluate:
         print('Scoring ' + policy_file_path)
-        all_scores, all_percs, all_lengths, all_rewards = evaluate_policy_on_levels(policy_file_path,[train_level],n_rep)
+        all_scores, all_percs, all_lengths, all_rewards = evaluate_policy_on_levels(policy_file_path,[train_level],n_rep=n_rep)
+        # prompt user to find out whether to evaluate only first policy
+        if counter == 0:
+            cont = input('Continue? y / n: ')
+            if cont is not 'y':
+                return
         perf =[all_scores,all_percs,all_lengths,all_rewards]
         train_perf.append(perf)
         # if test set performance is to be measured too
-        if(include_test):
+        if(include_test and (counter % test_eval_interval == 0 or counter + 1 == len(to_evaluate))):
             all_scores, all_percs, all_lengths, all_rewards = evaluate_policy_on_test_set(policy_file_path,n_rep)
             perf = [np.mean(all_scores), np.mean(all_percs), np.mean(all_lengths), np.mean(all_rewards)]
             test_perf.append(perf)
+        counter = counter + 1
 
     train_perf_frame = pd.DataFrame(train_perf, columns=['score', 'perc','length','reward'])
 
 
-    train_perf_frame.to_csv('train.csv')
+    train_perf_frame.to_csv('train_' + storage + '.csv')
 
     if(include_test):
         test_perf_frame = pd.DataFrame(test_perf, columns=['mean_score', 'mean_perc', 'mean_length', 'mean_reward'])
-        test_perf_frame.to_csv('test.csv')
+        test_perf_frame.to_csv('test_' + storage + '.csv')
 
 from gym import wrappers
 
