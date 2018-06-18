@@ -13,10 +13,11 @@ import gym
 @click.argument('policy_file')
 @click.argument('storage')
 @click.option('--include_test', is_flag=True)
+@click.option('--record', is_flag=True)
 
 @click.option('--extra_kwargs')
 
-def main(train_level, policy_file, storage, include_test, extra_kwargs):
+def main(train_level, policy_file, storage, include_test, record, extra_kwargs):
     max_episode_steps = 4500
     # register retro games with max steps per episode to be played out
     register_all(max_episode_steps=max_episode_steps)
@@ -43,7 +44,7 @@ def main(train_level, policy_file, storage, include_test, extra_kwargs):
     # evaluate on this level first
     for policy_file_path in to_evaluate:
         print('Scoring ' + policy_file_path)
-        all_scores, all_percs, all_lengths, all_rewards = evaluate_policy_on_levels(policy_file_path,[train_level],n_rep=n_rep)
+        all_scores, all_percs, all_lengths, all_rewards = evaluate_policy_on_levels(policy_file_path,[train_level],n_rep=n_rep, record=record)
         # prompt user to find out whether to evaluate only first policy
         if counter == 0:
             cont = input('Continue? y / n: ')
@@ -53,7 +54,7 @@ def main(train_level, policy_file, storage, include_test, extra_kwargs):
         train_perf.append(perf)
         # if test set performance is to be measured too
         if(include_test and (counter % test_eval_interval == 0 or counter + 1 == len(to_evaluate))):
-            all_scores, all_percs, all_lengths, all_rewards = evaluate_policy_on_test_set(policy_file_path,n_rep)
+            all_scores, all_percs, all_lengths, all_rewards = evaluate_policy_on_test_set(policy_file_path,n_rep,record=record)
             perf = [np.mean(all_scores), np.mean(all_percs), np.mean(all_lengths), np.mean(all_rewards)]
             test_perf.append(perf)
         counter = counter + 1
@@ -70,14 +71,14 @@ def main(train_level, policy_file, storage, include_test, extra_kwargs):
 from gym import wrappers
 
 
-def evaluate_policy_on_test_set(policy_file,n_rep):
+def evaluate_policy_on_test_set(policy_file,n_rep,record=False):
     ids = []
     for count in range(1, 11):
         ids.append('Test-v' + str(count))
 
-    return evaluate_policy_on_levels(policy_file,ids,n_rep)
+    return evaluate_policy_on_levels(policy_file,ids,n_rep,record=record)
 
-def evaluate_policy_on_levels(policy_file,ids,n_rep):
+def evaluate_policy_on_levels(policy_file,ids,n_rep, record= False):
 
     import tensorflow as tf
     from es_distributed.policies import MujocoPolicy, ESAtariPolicy, GAAtariPolicy, GAGenesisPolicy
@@ -104,7 +105,7 @@ def evaluate_policy_on_levels(policy_file,ids,n_rep):
         # load the policy just once
         # play each env
         for id in ids:
-            env = make_env(id)
+            env = make_env(id,record=record)
 
             temp_all_scores = []
             temp_all_lengths = []
@@ -139,13 +140,13 @@ def evaluate_policy_on_levels(policy_file,ids,n_rep):
     else:
         return all_scores, all_percs, all_lengths, all_rewards
 
-def make_env(env_id, record=False, extra_kwargs=None):
+def make_env(env_id, record=True, extra_kwargs=None):
     env = gym.make(env_id)
     env = sonic_util.sonicize_env(env)
 
     if record:
         import uuid
-        env = wrappers.Monitor(env, '/tmp/' + str(uuid.uuid4()), force=True)
+        env = wrappers.Monitor(env, '/tmp/results/' + str(uuid.uuid4()), force=True)
 
     if extra_kwargs:
         import json
